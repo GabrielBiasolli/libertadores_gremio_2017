@@ -181,4 +181,13 @@ def main():
 if __name__ == "__main__":
     main()
 
-#meu nome é baldasso
+# Renato Portaluppi, autoriza o Tete a baixar o Clash Royale?
+# Escolha da autorização:
+renato_autoriza = input("Renato Portaluppi autoriza o Tete a baixar o Clash Royale? [s/n]: ")
+if renato_autoriza.strip().lower() == "s":
+    print("Autorizado: o Tete pode baixar o Clash Royale.")
+elif renato_autoriza.strip().lower() == "n":
+    print("Negado: o Tete não pode baixar o Clash Royale.")
+else:
+    print("Resposta inválida. Digite 's' para sim ou 'n' para não.")
+
