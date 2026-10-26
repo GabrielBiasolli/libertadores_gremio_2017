@@ -1,169 +1,89 @@
-# 🤖 Controle por Voz do Robô Humanóide Yanshee via IA
+# Controle por Voz - Robô UBTECH Yanshee
 
-Este projeto implementa um sistema de controle por voz para o robô humanóide **UBTECH Yanshee**, desenvolvido para a disciplina de Robótica da **UNIFTEC**. A solução combina captura de áudio local, inteligência artificial em nuvem (reconhecimento de fala com **OpenAI Whisper** e interpretação semântica com **LLM**) e controle mecânico em tempo real através da **YanAPI**.
+## 1. Finalidade
 
----
-
-## 📋 Sumário
-
-- [Visão Geral](#-visão-geral)
-- [Arquitetura e Fluxo de Execução](#-arquitetura-e-fluxo-de-execução)
-- [Comandos e Ações Suportadas](#-comandos-e-ações-suportadas)
-- [Estrutura do Projeto](#-estrutura-do-projeto)
-- [Pré-requisitos](#-pré-requisitos)
-- [Instalação e Configuração](#-instalação-e-configuração)
-- [Como Executar](#-como-executar)
-- [Tratamento de Exceções e Resolução de Problemas](#-tratamento-de-exceções-e-resolução-de-problemas)
-- [Tecnologias Utilizadas](#-tecnologias-utilizadas)
+Script em Python para controle por voz do robô humanóide **UBTECH Yanshee**. O sistema captura áudio localmente, transcreve a fala via API OpenAI Whisper, classifica a intenção do comando através de um modelo de linguagem (LLM) e dispara a movimentação correspondente no robô via `YanAPI`.
 
 ---
 
-## 🔍 Visão Geral
-
-O objetivo do sistema é permitir que um usuário dite ordens em linguagem natural em português para o robô Yanshee. Em vez de depender de palavras-chave rígidas, o sistema utiliza um modelo de linguagem para entender a **intenção** do usuário, traduzindo comandos falados variados (como *"por favor, dê alguns passos à frente"* ou *"chega, fique parado"*) em comandos físicos seguros para os servomotores do robô.
-
-O código é otimizado para execução direta no ambiente Linux embarcado (Raspberry Pi) do Yanshee, utilizando sintaxe compatível com Python 3.5+.
-
----
-
-## 🏗 Arquitetura e Fluxo de Execução
-
-O ciclo de funcionamento segue o seguinte pipeline:
-
-```mermaid
-flowchart TD
-    A[Usuário pressiona ENTER e fala] --> B[gravar_audio: arecord 16kHz mono]
-    B --> C[Arquivo de áudio temp_command.wav]
-    C --> D[transcrever_audio: OpenAI Whisper whisper-1]
-    D --> E[Texto transcrito em Português]
-    E --> F[interpretar_comando: LLM OpenAI gpt-6-luna / GPT-4]
-    F --> G{Classificação da Intenção}
-    G -->|andar| H[YanAPI.sync_do_walk]
-    G -->|parar| I[YanAPI.sync_do_motion_stop / reset]
-    G -->|flexao| J[Busca dinâmica 'push' & sync_play_motion]
-    G -->|desconhecido| K[Aviso de comando não mapeado]
-    H & I & J & K --> L[Limpeza de áudio temporário & Pronto para novo comando]
-```
-
-### Funções Principais (`main.py`):
-
-1. **`gravar_audio(output_filename, duracao=4)`**: Executa o utilitário Linux nativo `arecord` via `subprocess`, gravando em formato 16-bit PCM linear mono a 16 kHz (padrão ideal para Whisper).
-2. **`transcrever_audio(audio_path)`**: Envia o `.wav` para o endpoint `/v1/audio/transcriptions` da OpenAI usando o modelo `whisper-1` com idioma forçado para português (`pt`).
-3. **`interpretar_comando(texto)`**: Envia a transcrição para a API Chat Completions com um prompt restritivo de sistema e `temperature: 0.0`. O modelo responde estritamente com uma das quatro classes: `andar`, `parar`, `flexao` ou `desconhecido`.
-4. **`executar_acao_yanshee(acao)`**: Comunica-se com o robô via `YanAPI` para disparar os movimentos correspondentes.
-5. **`main()`**: Interface CLI interativa em loop com captura de exceções (`KeyboardInterrupt`), remoção do áudio temporário e redefinição da postura do robô no encerramento.
-
----
-
-## 🎯 Comandos e Ações Suportadas
-
-Graças ao LLM, o usuário não precisa dizer uma palavra exata, mas sim expressar a ideia:
-
-| Ação Mapeada | Exemplos de Frases | Execução no Yanshee (YanAPI) |
-|---|---|---|
-| **`andar`** | *"ande para frente"*, *"caminhe"*, *"dê alguns passos"* | `YanAPI.sync_do_walk("forward", 4, "normal")` |
-| **`parar`** | *"pare"*, *"fique quieto"*, *"interromper movimento"* | `YanAPI.sync_do_motion_stop()` seguido de `YanAPI.sync_do_motion_reset()` |
-| **`flexao`** | *"faça flexões"*, *"exercício no chão"*, *"bora treinar flexão"* | Busca na memória (`get_motion_list_value()`) por animações contendo `push` e executa via `sync_play_motion()` |
-| **`desconhecido`** | Frases fora do escopo ou ruídos ininteligíveis | Não executa ações físicas, protegendo o robô |
-
----
-
-## 📂 Estrutura do Projeto
+## 2. Estrutura do Repositório
 
 ```text
-libertadores_gremio_2017/
-├── .env                # Arquivo para variáveis de ambiente locais (ex: OPENAI_API_KEY)
-├── .gitignore          # Ignora .env, temp_command.wav e caches Python
-├── main.py             # Script principal de controle por voz e integração
-└── README.md           # Documentação do projeto
+├── .env                # Variáveis de ambiente locais (ignorado no git)
+├── .gitignore          # Arquivos e diretórios ignorados
+├── requirements.txt    # Dependência Python (requests)
+├── main.py             # Script único de captura, IA e controle
+└── README.md           # Esta documentação
 ```
+
+### Funções no `main.py`:
+- `gravar_audio()`: Executa `arecord` no Linux para gravar 4 segundos de áudio em 16kHz mono.
+- `transcrever_audio()`: Envia o áudio ao endpoint Whisper (`whisper-1`) em português.
+- `interpretar_comando()`: Envia o texto ao LLM para classificar estritamente em: `andar`, `parar`, `flexao` ou `desconhecido`.
+- `executar_acao_yanshee()`: Mapeia a intenção classificada para chamadas de movimento na biblioteca `YanAPI`.
+- `main()`: Loop interativo no terminal (pressionar `ENTER` para falar, `q` para sair).
 
 ---
 
-## ⚙️ Pré-requisitos
+## 3. Ambiente (Robô UBTECH Yanshee)
 
-### Hardware
-- Robô humanoide **UBTECH Yanshee** (com Raspberry Pi interna e placa controladora de servos).
-- Microfone conectado e configurado como entrada de áudio padrão (`default`) no Linux ALSA.
-
-### Software
-- Sistema Operacional: Linux / Raspbian (nativo do Yanshee).
-- Python 3.5 ou superior instalado.
-- Pacote `alsa-utils` instalado (fornece o utilitário de gravação `arecord`).
-- Biblioteca proprietária **`YanAPI`** instalada no ambiente Python do robô.
-- Conexão com a Internet (para requisições à API da OpenAI).
+- **Plataforma:** Robô humanóide UBTECH Yanshee com placa interna baseada em Raspberry Pi / Linux.
+- **Áudio:** Captura de microfone gerenciada pelo subsistema Linux ALSA (`arecord`).
+- **SDK do Robô:** Biblioteca Python proprietária `YanAPI` conectada localmente via socket/IPC (`127.0.0.1`).
+- **Interpretador:** Python 3 (código formatado para compatibilidade com Python 3.5+).
+- **Conectividade:** Exige conexão ativa com a internet para comunicação com as APIs da OpenAI.
 
 ---
 
-## 🚀 Instalação e Configuração
+## 4. Configuração
 
-### 1. Clonar o Repositório no Yanshee
+1. **Dependência Python:**
+   ```bash
+   pip3 install -r requirements.txt
+   ```
+   *(Nota: O módulo `YanAPI` é nativo do ambiente do Yanshee).*
 
-Acesse o terminal do robô via SSH:
+2. **Chave de API OpenAI:**
+   Definir obrigatoriamente a variável de ambiente:
+   ```bash
+   export OPENAI_API_KEY="sk-..."
+   ```
 
-```bash
-git clone https://github.com/GabrielBiasolli/libertadores_gremio_2017.git
-cd libertadores_gremio_2017
-```
-
-### 2. Instalar Dependências do Python
-
-Instale os pacotes necessários:
-
-```bash
-pip3 install -r requirements.txt
-```
-
-> **Nota:** O módulo `YanAPI` já vem pré-instalado na imagem oficial do Yanshee. Se estiver testando fora do robô, certifique-se de possuir o SDK da UBTECH configurado.
-
-### 3. Configurar a Chave da OpenAI
-
-O script exige a variável de ambiente `OPENAI_API_KEY`. Defina-a no terminal antes de iniciar:
-
-```bash
-export OPENAI_API_KEY="sk-proj-sua-chave-aqui"
-```
-
-Alternativamente, é possível definir a variável de forma persistente no `~/.bashrc` do Raspberry Pi.
+3. **Pacote de Áudio do Sistema:**
+   O utilitário `arecord` deve estar disponível no PATH do Linux (pacote `alsa-utils`).
 
 ---
 
-## 🎮 Como Executar
+## 5. Execução
 
-Execute o script com o Python 3:
+No terminal do Yanshee:
 
 ```bash
 python3 main.py
 ```
 
-### Interagindo pelo Terminal:
+- Pressione **`ENTER`** para iniciar a gravação de 4 segundos e fale o comando.
+- Digite **`q`** e pressione **`ENTER`** (ou use `Ctrl+C`) para sair. Ao encerrar, o áudio temporário é apagado e os motores retornam à posição de repouso (`sync_do_motion_reset`).
 
-1. O terminal exibirá o cabeçalho do programa.
-2. Pressione **`[ENTER]`** quando estiver pronto para falar.
-3. O terminal indicará `[*] Gravando... Fale o comando agora!`. Fale claramente próximo ao microfone por até 4 segundos.
-4. O áudio será transcrito pelo Whisper e interpretado pelo LLM.
-5. O robô executará a ação física correspondente.
-6. Para encerrar o programa com segurança, digite **`q`** e pressione **`[ENTER]`** (ou pressione `Ctrl+C`). O robô retornará à sua postura de repouso segura (`reset`).
-
----
-
-## 🛠 Tratamento de Exceções e Resolução de Problemas
-
-- **Erro `Defina a variavel de ambiente OPENAI_API_KEY antes de rodar`**:
-  Certifique-se de exportar a variável com `export OPENAI_API_KEY="sua_chave"`.
-- **Erro ao gravar áudio via `arecord`**:
-  Verifique se o microfone está conectado e reconhecido pelo sistema rodando `arecord -l`.
-- **Erro 404 / Modelo LLM indisponível**:
-  No arquivo `main.py`, a função `interpretar_comando` está configurada com o modelo `"model": "gpt-6-luna"`. Caso sua conta OpenAI utilize modelos de produção padrão, altere para `"gpt-4o-mini"` ou `"gpt-3.5-turbo"` na linha 86.
-- **Movimento de flexão não encontrado**:
-  O robô pesquisa na lista de animações internas (`YanAPI.get_motion_list_value()`) por qualquer movimento contendo a palavra `push`. Se o arquivo tiver outro nome (como `push_up` ou `flexao`), a lista de nomes existentes será impressa no terminal para facilitar a conferência.
+### Ações Implementadas:
+- **`andar`**: `YanAPI.sync_do_walk("forward", 4, "normal")` (anda 4 passos para frente).
+- **`parar`**: `YanAPI.sync_do_motion_stop()` e `YanAPI.sync_do_motion_reset()`.
+- **`flexao`**: Busca movimento na memória contendo a substring `"push"` e executa `YanAPI.sync_play_motion(name=...)`.
 
 ---
 
-## 🧰 Tecnologias Utilizadas
+## 6. Limites e Restrições
 
-- **[UBTECH Yanshee & YanAPI](https://www.ubtrobot.com/)**: Plataforma robótica educacional e API de controle de servomotores.
-- **[OpenAI Whisper](https://openai.com/research/whisper)**: Reconhecimento automático de fala (ASR).
-- **[OpenAI Chat Completions](https://platform.openai.com/docs/api-reference/chat)**: Compreensão de linguagem natural (NLU) e classificação semântica de intenções.
-- **[ALSA (Advanced Linux Sound Architecture)](https://www.alsa-project.org/)**: Captura de áudio de baixa latência via `arecord`.
-- **Python 3**: Linguagem de orquestração do pipeline.
+- **Tempo fixo de escuta:** A gravação é travada em 4 segundos fixos, sem detecção dinâmica de silêncio (VAD).
+- **Dependência de internet:** O processamento depende inteiramente da latência e disponibilidade dos servidores da OpenAI.
+- **Vocabulário restrito:** Apenas 3 ações físicas estão implementadas (`andar`, `parar`, `flexao`). Qualquer outra fala é categorizada como `desconhecido`.
+- **Bloqueio síncrono:** As ações de caminhada e flexão são síncronas (`sync_...`), bloqueando novas entradas até o término do movimento.
+
+---
+
+## 7. Pontos a Confirmar no Hardware Real
+
+- [ ] **Modelo LLM (`gpt-6-luna`):** O código referencia o modelo `"gpt-6-luna"`. É necessário confirmar se a chave utilizada tem acesso a este identificador ou se deve ser alterada para um modelo disponível (ex: `gpt-4o-mini`).
+- [ ] **Nome do movimento de flexão:** Confirmar se o arquivo de movimento de flexão instalado na memória do robô contém `"push"` no nome retornado por `YanAPI.get_motion_list_value()`.
+- [ ] **Dispositivo de entrada ALSA:** Confirmar se o microfone padrão do robô responde corretamente por `-D default` no `arecord` ou se exige indicar o cartão/dispositivo específico (ex: `-D hw:1,0`).
+- [ ] **Níveis de ganho do microfone:** Testar se o nível de volume capturado pelo microfone embutido é suficiente para o Whisper transcrever com precisão no ambiente de teste.
