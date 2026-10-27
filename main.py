@@ -1,162 +1,50 @@
 # -*- coding: utf-8 -*-
-import os
-import json
-import requests
-import subprocess
-import YanAPI
+"""Código Principal (main.py): Orquestrador do fluxo Entrada -> Processamento -> Saída."""
 
-# --- CONFIGURAÇÕES ---
-# A chave da OpenAI vem da variavel de ambiente (nunca coloque no codigo):
-#   export OPENAI_API_KEY="sk-..."
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise SystemExit("Defina a variavel de ambiente OPENAI_API_KEY antes de rodar.")
+import os
+import sys
+
+from entrada import gravar_audio
+from processamento import obter_chave_api, transcrever_audio, interpretar_comando
+from saida import inicializar_robo, executar_acao_yanshee, resetar_robo
+
+# --- CONFIGURAÇÕES DO SISTEMA ---
 AUDIO_FILE = "temp_command.wav"
 RECORD_SECONDS = 4
+ROBOT_IP = "127.0.0.1"
 
-# Inicialização da API do Robô Yanshee
-YanAPI.yan_api_init("127.0.0.1")
 
-def gravar_audio(output_filename, duracao=RECORD_SECONDS):
-    """Grava o áudio usando o comando nativo do Linux (arecord)."""
-    print("[*] Gravando... Fale o comando agora!")
-    
-    comando = [
-        "arecord",
-        "-D", "default",     # Usa o microfone padrao
-        "-d", str(duracao),  # Duracao em segundos
-        "-f", "S16_LE",      # Formato 16-bit (exigido pelo Whisper)
-        "-r", "16000",       # Taxa de amostragem 16kHz
-        "-c", "1",           # Mono
-        "-q",                # Modo silencioso (sem spam no terminal)
-        output_filename
-    ]
-    
-    try:
-        subprocess.call(comando)
-        print("[*] Gravacao concluida.")
-    except Exception as e:
-        print("[-] Erro ao gravar audio via arecord: {}".format(e))
+def verificar_requisitos():
+    """Valida as configurações obrigatórias antes da execução."""
+    if not obter_chave_api():
+        print("[-] ERRO: A variavel de ambiente OPENAI_API_KEY nao foi definida.")
+        print("    Configure com: export OPENAI_API_KEY=\"sk-...\"")
+        sys.exit(1)
 
-def transcrever_audio(audio_path):
-    """Envia o áudio gravado para o Whisper via API REST da OpenAI."""
-    url = "https://api.openai.com/v1/audio/transcriptions"
-    headers = {
-        "Authorization": "Bearer {}".format(OPENAI_API_KEY)
-    }
-
-    try:
-        if not os.path.exists(audio_path):
-            print("[-] Arquivo de audio nao encontrado.")
-            return None
-
-        with open(audio_path, "rb") as f:
-            files = {
-                "file": (audio_path, f, "audio/wav"),
-                "model": (None, "whisper-1"),
-                "language": (None, "pt")
-            }
-            response = requests.post(url, headers=headers, files=files, timeout=20)
-
-        if response.status_code == 200:
-            return response.json().get("text", "")
-        else:
-            print("[-] Erro Whisper: {} - {}".format(response.status_code, response.text))
-            return None
-    except Exception as e:
-        print("[-] Excecao ao chamar Whisper: {}".format(e))
-        return None
-
-def interpretar_comando(texto):
-    """Envia a transcrição ao gpt-6-luna para mapear na intenção."""
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": "Bearer {}".format(OPENAI_API_KEY),
-        "Content-Type": "application/json"
-    }
-
-    prompt_sistema = (
-        "Voce eh o interpretador de comandos de um robo humanoide Yanshee. "
-        "Classifique a intencao do usuario estritamente em uma das seguintes palavras: "
-        "'andar', 'parar', 'flexao' ou 'desconhecido'. "
-        "Responda APENAS com a palavra da acao, sem pontuacao ou texto extra."
-    )
-
-    payload = {
-        "model": "gpt-6-luna",
-        "messages": [
-            {"role": "system", "content": prompt_sistema},
-            {"role": "user", "content": texto}
-        ],
-        "temperature": 0.0
-    }
-
-    try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=15)
-        if response.status_code == 200:
-            resultado = response.json()["choices"][0]["message"]["content"]
-            return resultado.strip().lower()
-        else:
-            print("[-] Erro LLM: {} - {}".format(response.status_code, response.text))
-            return "desconhecido"
-    except Exception as e:
-        print("[-] Excecao ao chamar LLM: {}".format(e))
-        return "desconhecido"
-
-def executar_acao_yanshee(acao):
-    """Executa a movimentação correspondente no Yanshee via YanAPI."""
-    print("[>] Executando no Yanshee: {}".format(acao))
-
-    if acao == "andar":
-        YanAPI.sync_do_walk("forward", 4, "normal")
-        
-    elif acao == "parar":
-        YanAPI.sync_do_motion_stop()
-        YanAPI.sync_do_motion_reset()
-        
-    elif acao == "flexao":
-        # 1. Busca a lista de movimentos salvos na memoria do robo
-        movimentos = YanAPI.get_motion_list_value()
-        
-        # 2. Garante o formato correto da lista
-        lista_nomes = []
-        if isinstance(movimentos, dict) and "data" in movimentos:
-            lista_nomes = movimentos["data"]
-        elif isinstance(movimentos, list):
-            lista_nomes = movimentos
-            
-        # 3. Procura dinamicamente pelo nome real do arquivo de flexao
-        nome_flexao = None
-        for mov in lista_nomes:
-            if "push" in str(mov).lower(): # Busca ignorando maiusculas/minusculas
-                nome_flexao = str(mov)
-                break
-                
-        # 4. Executa ou avisa o erro
-        if nome_flexao:
-            print("[*] Movimento encontrado! Nome exato: '{}'".format(nome_flexao))
-            YanAPI.sync_play_motion(name=nome_flexao)
-        else:
-            print("[!] ERRO: O arquivo de flexao nao foi encontrado na memoria do robo.")
-            print("    Movimentos disponiveis: {}".format(lista_nomes))
-            
-    else:
-        print("[!] Comando nao reconhecido ou nao mapeado para uma acao segura.")
 
 def main():
-    print("=" * 50)
-    print(" YANSHEE VOICE CONTROLLER (Python 3.5 - arecord)")
+    print("=" * 55)
+    print(" YANSHEE VOICE CONTROLLER (Python 3.5+)")
+    print(" Pipeline: Entrada (arecord) -> Processamento (IA) -> Saida (YanAPI)")
     print(" Comandos suportados: Andar | Parar | Flexao")
-    print("=" * 50)
+    print("=" * 55)
+
+    verificar_requisitos()
+    inicializar_robo(ROBOT_IP)
 
     try:
         while True:
-            entrada = input("\nPressione [ENTER] para falar (ou 'q' para sair): ")
-            if entrada.strip().lower() == 'q':
+            entrada_terminal = input("\nPressione [ENTER] para falar (ou 'q' para sair): ")
+            if entrada_terminal.strip().lower() == "q":
                 break
 
-            gravar_audio(AUDIO_FILE)
-            
+            # 1. ENTRADA: Captura de áudio do microfone
+            gravou = gravar_audio(AUDIO_FILE, duracao=RECORD_SECONDS)
+            if not gravou:
+                print("[-] Falha na gravacao de audio. Tente novamente.")
+                continue
+
+            # 2. PROCESSAMENTO: Transcrição (Whisper) e Classificação (LLM)
             print("[*] Transcrevendo via Whisper...")
             transcricao = transcrever_audio(AUDIO_FILE)
             if not transcricao:
@@ -164,21 +52,26 @@ def main():
                 continue
 
             print("[+] Ouvido: \"{}\"".format(transcricao))
-            
+
             print("[*] Classificando intencao...")
             acao = interpretar_comando(transcricao)
             print("[+] Acao mapeada: {}".format(acao))
 
+            # 3. SAÍDA: Atuação e movimento no robô
             executar_acao_yanshee(acao)
 
     except KeyboardInterrupt:
-        print("\n[!] Encerrando execucao.")
+        print("\n[!] Encerrando execucao por interrupcao do usuario.")
     finally:
+        # Limpeza de arquivos temporários e postura de segurança do robô
         if os.path.exists(AUDIO_FILE):
-            os.remove(AUDIO_FILE)
-        YanAPI.sync_do_motion_reset()
+            try:
+                os.remove(AUDIO_FILE)
+            except Exception:
+                pass
+        resetar_robo()
+        print("[*] Recursos liberados e robo em postura de repouso.")
+
 
 if __name__ == "__main__":
     main()
-
-
