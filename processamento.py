@@ -6,7 +6,7 @@ import os
 import requests
 
 MODELO_TRANSCRICAO = "whisper-1"
-MODELO_LLM = "gpt-6-luna"
+MODELO_LLM = "gpt-4o-mini"
 URL_TRANSCRICAO = "https://api.openai.com/v1/audio/transcriptions"
 URL_COMPLETIONS = "https://api.openai.com/v1/chat/completions"
 
@@ -18,8 +18,28 @@ PROMPT_SISTEMA = (
 )
 
 
+def carregar_env(caminho=".env"):
+    """Carrega variáveis simples de um arquivo .env se não estiverem definidas no ambiente."""
+    if not os.path.exists(caminho):
+        return
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            for linha in f:
+                linha = linha.strip()
+                if not linha or linha.startswith("#") or "=" not in linha:
+                    continue
+                chave, valor = linha.split("=", 1)
+                chave = chave.strip()
+                valor = valor.strip().strip("\"'").strip()
+                if chave and chave not in os.environ:
+                    os.environ[chave] = valor
+    except Exception:
+        pass
+
+
 def obter_chave_api():
-    """Retorna a chave da OpenAI a partir da variável de ambiente OPENAI_API_KEY."""
+    """Retorna a chave da OpenAI a partir da variável de ambiente ou do arquivo .env."""
+    carregar_env()
     return os.environ.get("OPENAI_API_KEY")
 
 
@@ -28,14 +48,14 @@ def transcrever_audio(audio_path, api_key=None):
 
     Parâmetros:
         audio_path (str): Caminho do arquivo WAV a transcrever.
-        api_key (str, opcional): Chave da OpenAI. Se omitida, busca em os.environ.
+        api_key (str, opcional): Chave da OpenAI. Se omitida, busca em os.environ ou .env.
 
     Retorna:
         str ou None: Texto transcrito ou None em caso de falha.
     """
     chave = api_key or obter_chave_api()
     if not chave:
-        print("[-] Erro: Chave OPENAI_API_KEY nao definida.")
+        print("[-] Erro: Chave OPENAI_API_KEY nao definida (configure via .env ou ambiente).")
         return None
 
     if not os.path.exists(audio_path):
@@ -77,7 +97,7 @@ def interpretar_comando(texto, api_key=None):
     """
     chave = api_key or obter_chave_api()
     if not chave:
-        print("[-] Erro: Chave OPENAI_API_KEY nao definida.")
+        print("[-] Erro: Chave OPENAI_API_KEY nao definida (configure via .env ou ambiente).")
         return "desconhecido"
 
     headers = {

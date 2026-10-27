@@ -11,8 +11,8 @@ O projeto adota princípios de **engenharia de software e arquitetura modular**,
 ## 2. Estrutura do Repositório
 
 ```text
-├── .env                # Variáveis de ambiente locais (ignorado no git)
-├── .gitignore          # Arquivos e diretórios ignorados
+├── .env.example        # Modelo de variáveis de ambiente (sem chaves sensíveis)
+├── .gitignore          # Arquivos e diretórios ignorados (inclui o .env com a chave real)
 ├── requirements.txt    # Dependência Python (requests)
 ├── entrada.py          # Código de ENTRADA: captura de áudio do microfone
 ├── processamento.py    # Código de PROCESSAMENTO: IA (Whisper + LLM)
@@ -44,8 +44,8 @@ A arquitetura do software é dividida em 3 módulos de responsabilidade única e
 | Módulo | Arquivo | Responsabilidade | Funções Principais |
 |---|---|---|---|
 | **Entrada** | `entrada.py` | Captura acústica de dados do microfone via utilitário do sistema ALSA. Não toma decisões nem executa ações motoras. | `gravar_audio(output_filename, duracao)` |
-| **Processamento** | `processamento.py` | Lógica de inteligência artificial e decisão. Transcreve o áudio em texto e infere a intenção (`andar`, `parar`, `flexao` ou `desconhecido`). Não faz I/O de microfone nem envia comandos a atuadores. | `transcrever_audio(audio_path)`<br>`interpretar_comando(texto)`<br>`obter_chave_api()` |
-| **Saída** | `saida.py` | Atuação física e interface com o hardware do robô através da biblioteca `YanAPI`. Executa os movimentos mapeados e postura de repouso. | `inicializar_robo(ip)`<br>`executar_acao_yanshee(acao)`<br>`resetar_robo()` |
+| **Processamento** | `processamento.py` | Lógica de inteligência artificial e decisão. Transcreve o áudio em texto e infere a intenção (`andar`, `parar`, `flexao` ou `desconhecido`). Carrega automaticamente a chave do `.env`. | `transcrever_audio(audio_path)`<br>`interpretar_comando(texto)`<br>`obter_chave_api()` |
+| **Saída** | `saida.py` | Atuação física e interface com o hardware do robô através da biblioteca `YanAPI`. Possui modo de simulação automático caso executado fora do robô. | `inicializar_robo(ip)`<br>`executar_acao_yanshee(acao)`<br>`resetar_robo()` |
 | **Principal** | `main.py` | Orquestração do ciclo de vida: valida o ambiente, inicializa o robô, executa o laço interativo conectando Entrada ➔ Processamento ➔ Saída e garante o reset no encerramento. | `verificar_requisitos()`<br>`main()` |
 
 ---
@@ -69,10 +69,15 @@ A arquitetura do software é dividida em 3 módulos de responsabilidade única e
    *(Nota: O módulo `YanAPI` é pré-instalado nativamente no sistema do Yanshee).*
 
 2. **Chave de API OpenAI:**
-   Defina a variável de ambiente no terminal antes de executar:
+   Crie o arquivo `.env` a partir do modelo `.env.example`:
    ```bash
-   export OPENAI_API_KEY="sk-..."
+   cp .env.example .env
    ```
+   Abra o `.env` e insira sua chave da OpenAI:
+   ```env
+   OPENAI_API_KEY=sk-...
+   ```
+   *(O arquivo `.env` está no `.gitignore` para nunca ser enviado ao GitHub).*
 
 3. **Pacote de Áudio do Sistema:**
    O utilitário `arecord` deve estar disponível no PATH (pacote `alsa-utils` no Linux).
@@ -89,7 +94,7 @@ python3 main.py
 
 ### Operação Interativa:
 1. Pressione **`ENTER`** para iniciar a captura de 4 segundos e fale o comando desejado.
-2. O sistema transcreve a fala, classifica a intenção e aciona os atuadores do robô.
+2. O sistema transcreve a fala, classifica a intenção via `gpt-4o-mini` e aciona os atuadores do robô.
 3. Para sair, digite **`q`** e pressione **`ENTER`** (ou use `Ctrl+C`). Ao finalizar, o arquivo de áudio temporário é removido e os servos retornam à postura de repouso (`resetar_robo`).
 
 ### Comandos de Ação Suportados:
@@ -110,7 +115,7 @@ python3 main.py
 
 ## 8. Pontos a Confirmar no Hardware Real
 
-- [ ] **Modelo LLM (`gpt-6-luna`):** Confirmar a disponibilidade do identificador do modelo na chave OpenAI utilizada ou ajustar para `gpt-4o-mini` em `processamento.py`.
+- [x] **Modelo LLM:** Atualizado para `gpt-4o-mini` em `processamento.py` (modelo oficial de alta velocidade e baixo custo).
 - [ ] **Nome do movimento de flexão:** Validar se o nome do arquivo de movimento instalado na memória interna do robô contém `"push"` (`YanAPI.get_motion_list_value()`).
 - [ ] **Dispositivo ALSA:** Verificar se o microfone padrão responde por `-D default` ou se requer endereço explícito (ex.: `-D hw:1,0`).
 - [ ] **Nível de ganho do microfone:** Ajustar o volume de captura para garantir clareza no Whisper em ambientes com ruído acústico.

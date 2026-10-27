@@ -41,6 +41,9 @@ def gravar_audio(output_filename, duracao=DURACAO_PADRAO):
         else:
             print("[-] arecord encerrou com codigo: {}".format(codigo_retorno))
             return False
+    except FileNotFoundError:
+        print("[-] Utilitario 'arecord' nao encontrado no sistema (disponivel nativamente no Linux com ALSA).")
+        return False
     except Exception as e:
         print("[-] Erro ao gravar audio via arecord: {}".format(e))
         return False

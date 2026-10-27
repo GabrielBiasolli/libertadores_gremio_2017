@@ -17,8 +17,8 @@ ROBOT_IP = "127.0.0.1"
 def verificar_requisitos():
     """Valida as configurações obrigatórias antes da execução."""
     if not obter_chave_api():
-        print("[-] ERRO: A variavel de ambiente OPENAI_API_KEY nao foi definida.")
-        print("    Configure com: export OPENAI_API_KEY=\"sk-...\"")
+        print("[-] ERRO: A chave OPENAI_API_KEY nao foi encontrada.")
+        print("    Configure no arquivo .env (ex: OPENAI_API_KEY=sk-...) ou exporte: export OPENAI_API_KEY=\"sk-...\"")
         sys.exit(1)
 
 
