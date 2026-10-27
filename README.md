@@ -13,8 +13,8 @@ O projeto adota princípios de **engenharia de software e arquitetura modular**,
 ```text
 ├── .env.example        # Modelo de variáveis de ambiente (sem chaves sensíveis)
 ├── .gitignore          # Arquivos e diretórios ignorados (inclui o .env com a chave real)
-├── requirements.txt    # Dependência Python (requests)
-├── entrada.py          # Código de ENTRADA: captura de áudio do microfone
+├── requirements.txt    # Dependência Python compatível com Python 3.5.3+
+├── entrada.py          # Código de ENTRADA: captura de áudio do microfone (arecord)
 ├── processamento.py    # Código de PROCESSAMENTO: IA (Whisper + LLM)
 ├── saida.py            # Código de SAÍDA: atuação física no robô (YanAPI)
 ├── main.py             # Código PRINCIPAL: coordenação do pipeline
@@ -52,21 +52,25 @@ A arquitetura do software é dividida em 3 módulos de responsabilidade única e
 
 ## 4. Ambiente (Robô UBTECH Yanshee)
 
-- **Plataforma:** Robô humanóide UBTECH Yanshee com placa de controle baseada em Raspberry Pi / Linux.
+- **Plataforma:** Robô humanóide UBTECH Yanshee com placa interna baseada em Raspberry Pi 3 (Raspbian Stretch / Debian 9).
+- **Interpretador:** Python 3.5.3 nativo (100% suportado sem sintaxe moderna incompatível).
 - **Áudio:** Subsistema Linux ALSA com ferramenta `arecord` para gravação de áudio em 16kHz mono.
 - **SDK do Robô:** Biblioteca Python proprietária `YanAPI` conectada localmente via socket/IPC (`127.0.0.1`).
-- **Interpretador:** Python 3 (código formatado para compatibilidade com Python 3.5+).
 - **Conectividade:** Exige acesso à internet para requisições HTTPS às APIs da OpenAI.
 
 ---
 
 ## 5. Configuração
 
-1. **Dependência Python:**
+1. **Dependência Python (no Python 3.5.3 do Yanshee):**
    ```bash
    pip3 install -r requirements.txt
    ```
-   *(Nota: O módulo `YanAPI` é pré-instalado nativamente no sistema do Yanshee).*
+   *Alternativa nativa no Raspbian (sem necessidade de pip):*
+   ```bash
+   sudo apt-get install python3-requests
+   ```
+   *(Nota: O módulo `YanAPI` já vem pré-instalado na imagem oficial do Yanshee).*
 
 2. **Chave de API OpenAI:**
    Crie o arquivo `.env` a partir do modelo `.env.example`:
@@ -115,6 +119,7 @@ python3 main.py
 
 ## 8. Pontos a Confirmar no Hardware Real
 
+- [x] **Compatibilidade Python 3.5.3:** Sintaxe rigorosamente verificada e testada sem dependências ou recursos do Python 3.6+.
 - [x] **Modelo LLM:** Atualizado para `gpt-4o-mini` em `processamento.py` (modelo oficial de alta velocidade e baixo custo).
 - [ ] **Nome do movimento de flexão:** Validar se o nome do arquivo de movimento instalado na memória interna do robô contém `"push"` (`YanAPI.get_motion_list_value()`).
 - [ ] **Dispositivo ALSA:** Verificar se o microfone padrão responde por `-D default` ou se requer endereço explícito (ex.: `-D hw:1,0`).
